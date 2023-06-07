@@ -7,14 +7,15 @@ from ice.analysis import multiple_sanger_analysis
 
 if __name__ == "__main__":
     sg.theme("DarkPurple")
-
+    font = ("Arial", 15)
+    font_b = ("Arial", 13)
     layout = [
-        [sg.Text("Select batch excel file[Required]:"), sg.Input(key="batch_xls"), sg.FileBrowse()],
-        [sg.Text("Output folder[Optional]:"), sg.Input(key="outdir"), sg.FolderBrowse()],
-        [sg.Button("Run")],
+        [sg.Text("Select batch excel file:", size=(20, 1), font=font), sg.Input(key="batch_xls"), sg.FileBrowse(font=font_b)],
+        [sg.Text("Output folder[Optional]:", size=(20, 1), font=font), sg.Input(key="outdir"), sg.FolderBrowse(font=font_b)],
+        [sg.Button("Run", font=font)],
     ]
 
-    window = sg.Window("GEB-ice", layout)
+    window = sg.Window("GEB-ice", layout, size=(750, 180))
 
     while True:
         event, values = window.read()
@@ -22,24 +23,22 @@ if __name__ == "__main__":
             break
 
         if event == "Run":
-            batch_xls = os.path.abspath(values["batch_xls"])
-            if not batch_xls:
-                sg.popup_error("Select the batch excel file before click the Run botton")
-            if not os.path.exists(batch_xls):
+            if not os.path.exists(values["batch_xls"]):
                 sg.popup_error("Selected batch excel file not exists, check your input")
+                continue
             outdir = values["outdir"]
             if not outdir:
-                outdir = os.path.join(os.path.dirname(batch_xls), "results")
+                outdir = os.path.join(os.path.dirname(values["batch_xls"]), "results")
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
 
-            data_dir = os.path.dirname(batch_xls)
+            data_dir = os.path.dirname(values["batch_xls"])
             run_log_file = os.path.join(outdir, "run_log.txt")
             run_err_file = os.path.join(outdir, "run_err.txt")
             sys.stdout = open(run_log_file, "w")
             sys.stderr = open(run_err_file, "w")
             window["Run"].update(disabled=True)
-            multiple_sanger_analysis(batch_xls, output_dir=outdir,data_dir=data_dir,verbose=True, single_line=None, allprops=True)
+            multiple_sanger_analysis(values["batch_xls"], output_dir=outdir,data_dir=data_dir,verbose=True, single_line=None, allprops=True)
             window["Run"].update(disabled=False)
             os.startfile(outdir)
 
