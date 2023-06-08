@@ -2,20 +2,31 @@
 import PySimpleGUI as sg
 import os
 import sys
+import glob
+import pandas as pd
 from ice.analysis import multiple_sanger_analysis
+from io import StringIO 
 
 
 if __name__ == "__main__":
+
+    
     sg.theme("DarkPurple")
     font = ("Arial", 15)
     font_b = ("Arial", 13)
     layout = [
+        [sg.Text("control ab1 file:", size=(20, 1), font=font), sg.Input(key="control_ab1"), sg.FileBrowse(font=font_b)],
+        [sg.Text("edited ab1 files folder", size=(20, 1), font=font), sg.Input(key="edit_ab1"),sg.FolderBrowse(font=font_b)],
+        [sg.Text("guide sequence", size=(20, 1), font=font), sg.Input(key="guide_seq")],
+        [sg.Text("donor sequence", size=(20, 1), font=font), sg.Input(key="donor_seq")],
+        [sg.Button("Generate excel file", font=font)],
+
         [sg.Text("Select batch excel file:", size=(20, 1), font=font), sg.Input(key="batch_xls"), sg.FileBrowse(font=font_b)],
         [sg.Text("Output folder[Optional]:", size=(20, 1), font=font), sg.Input(key="outdir"), sg.FolderBrowse(font=font_b)],
-        [sg.Button("Run", font=font)],
+        [sg.Button("Run", font=font), sg.Button("Clear", font=font)],
     ]
 
-    window = sg.Window("GEB-ice", layout, size=(750, 180))
+    window = sg.Window("GEB-ice", layout, size=(750, 300))
 
     while True:
         event, values = window.read()
@@ -35,12 +46,63 @@ if __name__ == "__main__":
             data_dir = os.path.dirname(values["batch_xls"])
             run_log_file = os.path.join(outdir, "run_log.txt")
             run_err_file = os.path.join(outdir, "run_err.txt")
-            sys.stdout = open(run_log_file, "w")
-            sys.stderr = open(run_err_file, "w")
+            stdout_buffer = StringIO()
+            stderr_buffer = StringIO()
+            sys.stdout = stdout_buffer
+            sys.stderr = stdout_buffer
             window["Run"].update(disabled=True)
             multiple_sanger_analysis(values["batch_xls"], output_dir=outdir,data_dir=data_dir,verbose=True, single_line=None, allprops=True)
             window["Run"].update(disabled=False)
+            with open(run_log_file, "w") as fw:
+                fw.write(stdout_buffer.getvalue())
+            with open(run_err_file, "w") as fw:
+                fw.write(stderr_buffer.getvalue())
             os.startfile(outdir)
 
+        if event == "Generate excel file":
+            if not os.path.exists(values["edit_ab1"]):
+                sg.popup_error("Select folder of edited ab1 file not exists")
+                continue
+            edit_ab1 = os.path.abspath(values["edit_ab1"])
+            edit_ab1_files = glob.glob(f"{edit_ab1}/*.ab1")
+            if len(edit_ab1_files) == 0:
+                sg.popup_error(f"Found no ab1 files at {edit_ab1}")
+                continue
+            desk_top = os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop')
+            rows = []
+            for idx, edit_ab1_file in enumerate(edit_ab1_files):
+                file_name = os.path.basename(edit_ab1_file)
+                sample_name = file_name.replace(".ab1", "")
+
+                row = [idx, sample_name]
+                if values["control_ab1"]:
+                    row.append(os.path.abspath(values["control_ab1"]))
+                else:
+                    row.append("")
+
+                row.append(edit_ab1_file)
+
+                if values["guide_seq"]:
+                    row.append(values["guide_seq"])
+                else:
+                    row.append("")
+
+                if values["donor_seq"]:
+                    row.append(values["donor_seq"])
+                else:
+                    row.append("")
+
+                rows.append(row)
+                
+            df = pd.DataFrame(rows)
+            df.columns = ["", "Label", "Control File", "Experiment File", "Guide Sequence", "Donor"]
+            out_xlsx = os.path.join(desk_top, "generated_batch.xlsx")
+            df.to_excel(out_xlsx, index=None)
+            window["batch_xls"].update(out_xlsx)
+
+
+        if event == "Clear":
+            for k in ["control_ab1", "edit_ab1", "guide_seq", "donor_seq", "batch_xls", "outdir"]:
+                window[k].update("")
 
     window.close()
